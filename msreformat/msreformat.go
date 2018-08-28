@@ -33,6 +33,7 @@ func Reformat(ionFilename string, fdrFilename string, outputFilename string, ign
 	writer.Flush()
 	o.Close()
 	progressOutput <- "Completed."
+	close(progressOutput)
 }
 
 func ProcessIons(outputChan chan string, swathFile fileHandler.FileObject, fdrMap map[string]map[string][]float64, samples int, ignoreBlank bool, cutoff float64) {

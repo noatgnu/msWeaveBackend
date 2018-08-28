@@ -11,13 +11,6 @@ import (
 	"net/http"
 )
 
-
-
-type SocketEvent struct {
-	Event string `json:"event"`
-	Message dispatcher.Job `json:"msg"`
-}
-
 type LogEvent struct {
 	Name string
 	Detail string
@@ -86,7 +79,7 @@ func socket(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	for {
-		var event SocketEvent
+		var event dispatcher.SocketEvent
 		_, message, err := c.ReadMessage()
 		if err != nil {
 			log.Println("ElectronSocket: [err]", err)
@@ -109,7 +102,48 @@ func socket(w http.ResponseWriter, r *http.Request) {
 			log.Println("Connected")
 		case "job":
 			log.Println(event.Message)
-			progressC := dispatcher.Dispatch(event.Message)
+			progressC := dispatcher.Dispatch(event.Message, c)
+			for r := range progressC {
+
+				if r == "Completed." {
+					c.WriteJSON(event.Message)
+				}
+			}
+		}
+	}
+}
+
+func socketCSV(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+	defer c.Close()
+
+	for {
+		var event dispatcher.SocketEvent
+		_, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("ElectronSocket: [err]", err)
+			break
+		}
+
+		//Handle Message
+		err = json.Unmarshal(message, &event)
+		if err != nil {
+			log.Println("Unmashal: ", err)
+			break
+		}
+		log.Printf("ElectronSocket: [received] %+v", event)
+
+		//Shutdown Event
+		switch event.Event {
+		case "connected":
+			log.Println("Connected")
+		case "job":
+			log.Println(event.Message)
+			progressC := dispatcher.Dispatch(event.Message, c)
 			for r := range progressC {
 
 				if r == "Completed." {
@@ -125,6 +159,7 @@ func main() {
 
 	var addr = config.server + ":" + config.port
 	http.HandleFunc("/ui", socket)    //Endpoint for Electron startup/teardown
+	http.HandleFunc("/csv", socket)
 	go http.ListenAndServe(addr, nil) //Start websockets in goroutine
 
 	color.Set(color.FgGreen)
